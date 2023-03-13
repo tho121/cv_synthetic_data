@@ -1,0 +1,17 @@
+suffix: "std"
+train_class_size: 100
+eval_class_size: 100
+num_classes: 3
+num_epochs: 200
+
+model_configs:
+  - name: effnetv2
+    model_index: 0
+    batch_size: 32
+    lr: 0.0005
+    retrain: True
+  - name: vit
+    model_index: 1
+    batch_size: 24
+    lr: 0.0005
+    retrain: True

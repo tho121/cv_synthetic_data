@@ -4,18 +4,18 @@ import torchvision
 import torch.nn as nn
 import os
 from torchvision import datasets, transforms
+from enum import Enum
 
 num_classes = 3
 
-def allModels():
-    models = []
+def getModel(model_index, weights_path=None):
+    model_funcs = [efficientNet, convNext, vit, swinV2]
 
-    models.append(efficientNet("output_eff_1000/best_checkpoint.pt"))
-    models.append(convNext())
-    models.append(vit("output_vit_1000/best_checkpoint.pt"))
-    models.append(swinV2("output_swin_1000/best_checkpoint.pt"))
+    #don't throw error, calling  function doesn't know the size of model_funcs, just check for None
+    if model_index >= len(model_funcs):
+        return None
 
-    return models
+    return model_funcs[model_index](weights_path)
 
 def efficientNet(weights_path=None):
     model = torchvision.models.efficientnet_v2_s(weights=None)
@@ -24,6 +24,7 @@ def efficientNet(weights_path=None):
     if weights_path is not None:
         model.load_state_dict(torch.load(weights_path))
 
+    print(f"Model loaded: efficientNet - weights_path: {weights_path}")
     return model
 
 def convNext(weights_path=None):
@@ -33,6 +34,7 @@ def convNext(weights_path=None):
     if weights_path is not None:
         model.load_state_dict(torch.load(weights_path))
 
+    print(f"Model loaded: convNext - weights_path: {weights_path}")
     return model
 
 def vit(weights_path=None):
@@ -57,6 +59,8 @@ def vit(weights_path=None):
     if weights_path is not None:
         model.load_state_dict(torch.load(weights_path))
 
+    print(f"Model loaded: vit - weights_path: {weights_path}")
+
     return model
 
 def swinV2(weights_path=None):
@@ -80,5 +84,7 @@ def swinV2(weights_path=None):
 
     if weights_path is not None:
         model.load_state_dict(torch.load(weights_path))
+
+    print(f"Model loaded: swinV2 - weights_path: {weights_path}")
 
     return model
