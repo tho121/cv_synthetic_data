@@ -9,7 +9,7 @@ from enum import Enum
 num_classes = 3
 
 def getModel(model_index, weights_path=None):
-    model_funcs = [efficientNet, convNext, vit, swinV2]
+    model_funcs = [efficientNet, vit, convNext, swinV2]
 
     #don't throw error, calling  function doesn't know the size of model_funcs, just check for None
     if model_index >= len(model_funcs):

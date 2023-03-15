@@ -16,14 +16,14 @@ def train(model, output_dir, dataloaders, tb_writer, model_name, lr=0.0005, num_
     params = [p for p in model.parameters() if p.requires_grad]
     optimizer = torch.optim.AdamW(params, lr=lr) #effnet, vit = 0.0005
     criteron = nn.CrossEntropyLoss()
-    lr_scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=20)
+    lr_scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=10)
     #scaler = torch.cuda.amp.GradScaler()
     #https://discuss.pytorch.org/t/optimizer-step-before-lr-scheduler-step-error-using-gradscaler/92930/7
 
     #early stopping
     val_loss = 99999.0
 
-    early_stopping_patience = 10 #number of validation epochs that don't beat the best validation
+    early_stopping_patience = 5 #number of validation epochs that don't beat the best validation
     current_early_stopping_count = 0
     early_stop = False
 
@@ -79,7 +79,7 @@ def train(model, output_dir, dataloaders, tb_writer, model_name, lr=0.0005, num_
                 
             
             epoch_loss = running_loss / max(count, 1) #dataset_sizes[phase]
-            epoch_acc = running_corrects.double() / max(dataset_size, 1) #dataset_sizes[phase]
+            epoch_acc = running_corrects.double().item() / max(dataset_size, 1) #dataset_sizes[phase]
 
             if phase == 'train':
                 tb_writer.add_scalar('training loss', epoch_loss, epoch)
@@ -89,7 +89,7 @@ def train(model, output_dir, dataloaders, tb_writer, model_name, lr=0.0005, num_
                 tb_writer.add_scalar('val loss', epoch_loss, epoch)
                 tb_writer.add_scalar('val acc', epoch_acc, epoch)
 
-            print(f'{model_name}: {phase} Loss: {epoch_loss:.4f} Acc: {epoch_acc:.4f}')
+            print(f'{model_name}: {phase} Epoch: {epoch} Loss: {epoch_loss:.4f} Acc: {epoch_acc:.4f}')
 
             tb_writer.add_scalar('learning rate', optimizer.param_groups[0]['lr'], epoch)
 
@@ -98,7 +98,7 @@ def train(model, output_dir, dataloaders, tb_writer, model_name, lr=0.0005, num_
 
                 if epoch_acc > best_acc:
                     best_acc = epoch_acc
-                    print("Saving at epoch: %.1f" % (epoch))
+                    print(f"Saving at epoch: {epoch}")
                     best_epoch = epoch
                     torch.save(model.state_dict(), os.path.join(output_dir, 'best_checkpoint.pt'))
 
@@ -110,14 +110,14 @@ def train(model, output_dir, dataloaders, tb_writer, model_name, lr=0.0005, num_
 
                 if current_early_stopping_count > early_stopping_patience:
                     early_stop = True
-                    print("Early stopping at epoch: %.1f" % (epoch))
+                    print(f"Early stopping at epoch: {epoch}")
                     break
 
     print("finished")
     
     torch.save(model.state_dict(), os.path.join(output_dir, 'final_checkpoint.pt'))
-    print("Best epoch: %.1f" % (best_epoch))
-    print("Best acc: %.1f" % (best_acc))
+    print(f"Best epoch: {best_epoch}")
+    print(f"Best acc: {best_acc}")
 
 def test(model, output_dir, dataloaders, tb_writer, model_name, device="cuda"):
 
@@ -141,9 +141,9 @@ def test(model, output_dir, dataloaders, tb_writer, model_name, device="cuda"):
                 inputs = inputs.to(device)
                 labels = labels.to(device)
 
-                with torch.cuda.amp.autocast():
-                    outputs = model(inputs)
-                    _, preds = torch.max(outputs, 1)
+                #with torch.cuda.amp.autocast():
+                outputs = model(inputs)
+                _, preds = torch.max(outputs, 1)
 
                 # statistics
                 running_corrects += torch.sum(preds == labels.data)
@@ -181,16 +181,23 @@ def main():
     eval_class_size = config["eval_class_size"]
     num_classes = config["num_classes"]
     num_epochs = config["num_epochs"]
+    real_train_class_size = config['real_train_class_size']
+    real_eval_class_size = config['real_eval_class_size']
+
+    is_mixed_datasets = (suffix == "mixed")
 
     for c in config["model_configs"]:
+
+        if c['skip']:
+            continue
 
         name = c['name']
         model_index = c['model_index']
         batch_size = c['batch_size']
         lr = c['lr']
-        retrain = c['retrain']
+        load_weights = c['load_weights']
 
-        print(f"Config loaded: Name: {name} BS: {batch_size} MI: {model_index} RT: {retrain}")
+        print(f"Config loaded: Name: {name} Learning Rate: {lr} Batch Size: {batch_size} Model Index: {model_index} Load Weights: {load_weights}")
 
         output_dir = os.path.join('output', f"{name}_{train_class_size}_{suffix}")
 
@@ -198,18 +205,29 @@ def main():
         if not isExist:
             os.makedirs(output_dir)
 
-        if not retrain:
+        if load_weights:
             model = models.getModel(model_index, os.path.join(output_dir, "best_checkpoint.pt"))
         else:
             model = models.getModel(model_index)
 
-        dataloaders = load_datasets.load_data("dataset", 
+        dataloaders = None
+
+        if is_mixed_datasets:
+            dataloaders = load_datasets.load_data_mixed("dataset", 
+                                num_classes=num_classes, 
+                                batch_size=batch_size,
+                                train_class_size=train_class_size,
+                                eval_class_size=eval_class_size,
+                                real_train_class_size=real_train_class_size,
+                                real_eval_class_size=real_eval_class_size)
+        else:
+            dataloaders = load_datasets.load_data("dataset", 
                                 num_classes=num_classes, 
                                 batch_size=batch_size,
                                 train_class_size=train_class_size,
                                 eval_class_size=eval_class_size)
         
-        writer = SummaryWriter(os.path.join(output_dir, 'output', 'test'))
+        writer = SummaryWriter(os.path.join(output_dir, 'output'))
 
         train(model, output_dir, dataloaders, writer, name, lr, num_epochs, device)
         test(model, output_dir, dataloaders, writer, name, device)
