@@ -13,6 +13,7 @@ train_transforms = transforms.Compose([
     ])
 
 test_transforms = transforms.Compose([
+        transforms.Resize(224),
         transforms.ToTensor(),
         transforms.Normalize(mean=[0.485, 0.456, 0.406],
                              std=[0.229, 0.224, 0.225])
@@ -141,5 +142,50 @@ def load_data_mixed(dataset_paths, num_classes=3, batch_size=24, train_class_siz
     loaders["val"] = val_loader
     loaders["test"] = test_loader
     loaders["real_test"] = real_test_loader
+
+    return loaders
+
+def get_train_val_subset(dataset, num_classes=3, class_size=100, train_transform=None, test_transform=None):
+    train_indices = []
+    test_indices = []
+
+    #get random imgs based on train_class_size for each class
+    for i in range(num_classes):
+        c = torch.tensor([i])
+
+        c_indices = torch.nonzero(torch.tensor(dataset.targets) == c).squeeze()
+        c_indices = (torch.tensor(dataset.targets)[..., None] == c).any(-1).nonzero(as_tuple=True)[0]
+        perm = torch.randperm(c_indices.size(0))
+        train_indices.extend(c_indices[perm][:class_size].numpy())
+        test_indices.extend(c_indices[perm][class_size:].numpy())
+
+    train_subset = torch.utils.data.Subset(dataset, train_indices)
+    train_subset.transform = train_transform
+
+    test_subset = torch.utils.data.Subset(dataset, test_indices)
+    test_subset.transform = test_transform
+
+    return train_subset, test_subset
+
+def load_data_real_only(dataset_paths, num_classes=3, batch_size=24, train_class_size=30):
+    train_image_datasets = datasets.ImageFolder(os.path.join(dataset_paths, "real_test"), train_transforms)
+
+    #get random imgs based on train_class_size for each class
+    train_image_subset, val_image_subset = get_train_val_subset(train_image_datasets, 
+                                               num_classes=num_classes, 
+                                               class_size=train_class_size, 
+                                               train_transform=train_transforms,
+                                               test_transform=test_transforms)
+    
+    train_loader = torch.utils.data.DataLoader(train_image_subset,
+                                             batch_size=batch_size, shuffle=True,
+                                             num_workers=2)
+    val_loader = torch.utils.data.DataLoader(val_image_subset,
+                                                batch_size=batch_size, shuffle=False,
+                                                num_workers=2)
+
+    loaders = {}
+    loaders["train"] = train_loader
+    loaders["val"] = val_loader
 
     return loaders

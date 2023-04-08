@@ -7,8 +7,8 @@ import torchshow
 from torchvision import datasets, transforms
 from cut_model import CUT_model
 
-EPOCHS = 400
-load_model = True
+EPOCHS = 150
+load_model = False
 
 def main():
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -28,7 +28,7 @@ def main():
 
     resize_transform = transforms.Resize(224)
 
-    dataset = datasets.ImageFolder("syn_turtle", test_transforms)
+    dataset = datasets.ImageFolder("syn_bg", test_transforms)
     c = torch.tensor([0])
     c_indices = torch.nonzero(torch.tensor(dataset.targets) == c).squeeze()
     x_dataset = torch.utils.data.Subset(dataset, c_indices)
@@ -71,7 +71,9 @@ def main():
                                 os.path.join("cut_output", f"test_{e+1}.jpg"))
             
         if(e+1) % 20 == 0:
-            cm.save("cut_output")
+            cm.save("cut_output", f"e_{e+1}")
+
+    cm.save("cut_output", f"e_{e+1}")
 
 
 if __name__ == '__main__':

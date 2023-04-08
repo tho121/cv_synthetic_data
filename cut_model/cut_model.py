@@ -21,11 +21,11 @@ class CUT_model():
 
         self.g_optimizer = torch.optim.AdamW(nn.ModuleList([self.g_encoder, self.g_decoder]).parameters(), lr=0.0002)
         self.d_optimizer = torch.optim.AdamW(self.d_model.parameters(), lr=0.0002)
-        self.h_optimizer = torch.optim.AdamW(self.h_model.parameters(), lr=0.0002)
+        self.h_optimizer = torch.optim.AdamW(self.h_model.parameters(), lr=0.005)
 
-        #self.g_optimizer = torch.optim.Adam(nn.ModuleList([self.g_encoder, self.g_decoder]).parameters(), lr=0.0002, betas=[0.5,0.999])
-        #self.d_optimizer = torch.optim.Adam(self.d_model.parameters(), lr=0.0002, betas=[0.5,0.999])
-        #self.h_optimizer = torch.optim.Adam(self.h_model.parameters(), lr=0.0002, betas=[0.5,0.999])
+        self.g_scheduler = torch.optim.lr_scheduler.LinearLR(self.g_optimizer, start_factor=1.0, end_factor=0.01)
+        self.d_scheduler = torch.optim.lr_scheduler.LinearLR(self.d_optimizer, start_factor=1.0, end_factor=0.01)
+        self.h_scheduler = torch.optim.lr_scheduler.LinearLR(self.h_optimizer, start_factor=1.0, end_factor=0.01)
 
         self.lambda_x = lambda_x
         self.lambda_y = lambda_y
@@ -91,13 +91,15 @@ class CUT_model():
         y_d = self.d_model(y)
         y_hat_d = self.d_model(y_hat.detach())
 
-        gan_loss_y = self.gan_criterion(y_d, self.tgt_ones).mean()
-        gan_loss_y_hat = self.gan_criterion(y_hat_d, self.tgt_zeros).mean()
+        gan_loss_y = self.gan_criterion(y_d, torch.ones_like(y_d, device=self.device)).mean()
+        gan_loss_y_hat = self.gan_criterion(y_hat_d, torch.zeros_like(y_hat_d, device=self.device)).mean()
 
         d_gan_loss = (gan_loss_y + gan_loss_y_hat) * 0.5
         
         d_gan_loss.backward()
+        detached_d_loss = d_gan_loss.item()
         self.d_optimizer.step()
+        self.d_scheduler.step()
 
         #optimize generator (including patchNCE)
         self.g_optimizer.zero_grad()
@@ -107,7 +109,7 @@ class CUT_model():
             p.requires_grad = False
 
         y_hat_d = self.d_model(y_hat)
-        gan_loss_y_hat = self.gan_criterion(y_hat_d, self.tgt_ones).mean()
+        gan_loss_y_hat = self.gan_criterion(y_hat_d, torch.ones_like(y_hat_d, device=self.device)).mean()
 
         nce_loss_x = 0.0
         nce_loss_idt = 0.0
@@ -119,27 +121,36 @@ class CUT_model():
         nce_loss_x /= len(self.patchNCE_criterion)
         nce_loss_idt /= len(self.patchNCE_criterion)
 
-        g_gan_loss = gan_loss_y_hat + (((self.lambda_x * nce_loss_x) + (self.lambda_y * nce_loss_idt)) * 0.5)
+        h_patch_loss = (((self.lambda_x * nce_loss_x) + (self.lambda_y * nce_loss_idt)) * 0.5)
+        g_gan_loss = gan_loss_y_hat 
 
+        total_gan_loss = g_gan_loss + h_patch_loss
         
-        g_gan_loss.backward() #this will propagate through h_model too
+        total_gan_loss.backward() #this will propagate through h_model too
         self.g_optimizer.step()
         self.h_optimizer.step()
 
-        return d_gan_loss.item(), g_gan_loss.item()
+        self.g_scheduler.step()
+        self.h_scheduler.step()
+
+        return detached_d_loss, total_gan_loss.item()
 
 
-    def save(self, output_dir):
-        torch.save(self.g_encoder.state_dict(), os.path.join(output_dir,"g_enc.pt"))
-        torch.save(self.g_decoder.state_dict(), os.path.join(output_dir,"g_dec.pt"))
-        torch.save(self.d_model.state_dict(), os.path.join(output_dir,"d_model.pt"))
-        torch.save(self.h_model.state_dict(), os.path.join(output_dir,"h_model.pt"))
+    def save(self, output_dir, suffix="0"):
+        torch.save(self.g_encoder.state_dict(), os.path.join(output_dir, f"g_enc_{suffix}.pt"))
+        torch.save(self.g_decoder.state_dict(), os.path.join(output_dir, f"g_dec_{suffix}.pt"))
+        torch.save(self.d_model.state_dict(), os.path.join(output_dir, f"d_model_{suffix}.pt"))
+        torch.save(self.h_model.state_dict(), os.path.join(output_dir, f"h_model_{suffix}.pt"))
 
-    def load(self, model_dir):
-        self.g_encoder.load_state_dict(torch.load(os.path.join(model_dir,"g_enc.pt")))
-        self.g_decoder.load_state_dict(torch.load(os.path.join(model_dir,"g_dec.pt")))
-        self.d_model.load_state_dict(torch.load(os.path.join(model_dir,"d_model.pt")))
-        self.h_model.load_state_dict(torch.load(os.path.join(model_dir,"h_model.pt")))
+    def load(self, model_dir, suffix=None):
+
+        if suffix is None:
+            suffix = ""
+
+        self.g_encoder.load_state_dict(torch.load(os.path.join(model_dir,f"g_enc_{suffix}.pt")))
+        self.g_decoder.load_state_dict(torch.load(os.path.join(model_dir,f"g_dec_{suffix}.pt")))
+        self.d_model.load_state_dict(torch.load(os.path.join(model_dir,f"d_model_{suffix}.pt")))
+        self.h_model.load_state_dict(torch.load(os.path.join(model_dir,f"h_model_{suffix}.pt")))
 
 
 

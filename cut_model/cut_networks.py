@@ -52,18 +52,18 @@ class CUT_G_encoder(nn.Module):
             nn.Conv2d(3, 64, kernel_size=7, padding=0),
             nn.InstanceNorm2d(64),
             nn.ReLU(True),
-            nn.Conv2d(64, 128, kernel_size=3, padding=1),
+            nn.Conv2d(64, 128, kernel_size=4, padding=1, stride=2),
         )
         self.layer2 = nn.Sequential(
             nn.InstanceNorm2d(128),
             nn.ReLU(True),
-            Downsample(128),
-            nn.Conv2d(128, 256, kernel_size=3, padding=1),
+            #Downsample(128),
+            nn.Conv2d(128, 256, kernel_size=4, padding=1, stride=2),
         )
         self.layer3 = nn.Sequential(
             nn.InstanceNorm2d(256),
             nn.ReLU(True),
-            Downsample(256),
+            #Downsample(256),
         )
 
         self.layer4 = ResNetBlock(256)
@@ -109,13 +109,15 @@ class CUT_G_decoder(nn.Module):
         super(CUT_G_decoder, self).__init__()
 
         self.model = nn.Sequential(
-            Upsample(256),
-            nn.Conv2d(256, 128, kernel_size=3, padding=1),
+            #Upsample(256,1),
+            #nn.Conv2d(256, 128, kernel_size=3, padding=1),
+            nn.ConvTranspose2d(256, 128, kernel_size=4, stride=2, padding=1, output_padding=0),
             nn.InstanceNorm2d(128),
             nn.ReLU(True),
 
-            Upsample(128),
-            nn.Conv2d(128, 64, kernel_size=3, padding=1),
+            #Upsample(128,1),
+            #nn.Conv2d(128, 64, kernel_size=3, padding=1),
+            nn.ConvTranspose2d(128, 64, kernel_size=4, stride=2, padding=1, output_padding=0),
             nn.InstanceNorm2d(64),
             nn.ReLU(True),
 
@@ -136,20 +138,20 @@ class CUT_D(nn.Module):
         super(CUT_D, self).__init__()
 
         self.model = nn.Sequential(
-            nn.Conv2d(3, 64, kernel_size=4, padding=1),
+            nn.Conv2d(3, 64, kernel_size=4, padding=1, stride=2),
             nn.LeakyReLU(0.2, True),
 
-            Downsample(64, 1),
-            nn.Conv2d(64, 128, kernel_size=4, padding=1),
+            #Downsample(64, 1),
+            nn.Conv2d(64, 128, kernel_size=4, padding=1, stride=2),
             nn.InstanceNorm2d(128),
             nn.LeakyReLU(0.2, True),
 
-            Downsample(128, 1),
-            nn.Conv2d(128, 256, kernel_size=4, padding=1),
+            #Downsample(128, 1),
+            nn.Conv2d(128, 256, kernel_size=4, padding=1, stride=2),
             nn.InstanceNorm2d(256),
             nn.LeakyReLU(0.2, True),
 
-            Downsample(256, 1),
+            #Downsample(256, 1),
             nn.Conv2d(256, 512, kernel_size=4, padding=1),
             nn.InstanceNorm2d(512),
             nn.LeakyReLU(0.2, True),
@@ -233,29 +235,29 @@ class Downsample(nn.Module):
     def __init__(self, channels, pad=0):
         super(Downsample, self).__init__()
 
-        #filt = get_filter(3)
-        #filt = filt[None, None, :, :].repeat((channels, 1, 1, 1))
-        #self.register_buffer('filter', filt)
+        filt = get_filter(3)
+        filt = filt[None, None, :, :].repeat((channels, 1, 1, 1))
+        self.register_buffer('filter', filt)
         self.pad = nn.ReflectionPad2d(pad)
 
     def forward(self, x):
         x = self.pad(x)
-        return F.interpolate(x, scale_factor=0.5, mode='bilinear', antialias=True)
+        #return F.interpolate(x, scale_factor=0.5, mode='bilinear', antialias=True)
         
-        #return F.conv2d(x, self.filter, stride=2, padding=0, groups=x.shape[1])
+        return F.conv2d(x, self.filter, stride=2, padding=1, groups=x.shape[1])
 
 class Upsample(nn.Module):
     def __init__(self, channels, pad=0):
         super(Upsample, self).__init__()
 
-        #filt = get_filter(4)
-        #filt = filt[None, None, :, :].repeat((channels, 1, 1, 1)) * (2**2) # (stride**2)
-        #self.register_buffer('filter', filt)
+        filt = get_filter(4)
+        filt = filt[None, None, :, :].repeat((channels, 1, 1, 1)) * (2**2) # (stride**2)
+        self.register_buffer('filter', filt)
         self.pad = nn.ReplicationPad2d(pad)
 
     def forward(self, x):
         x = self.pad(x)
-        return F.interpolate(x, scale_factor=2.0, mode='bilinear', antialias=True)
-        #x = F.conv_transpose2d(x, self.filter, stride=2, padding=2, groups=x.shape[1])
-        #return x[:,:,1:-1,1:-1]
+        #return F.interpolate(x, scale_factor=2.0, mode='bilinear', antialias=True)
+        x = F.conv_transpose2d(x, self.filter, stride=2, padding=2, groups=x.shape[1])
+        return x[:,:,1:-1,1:-1]
         

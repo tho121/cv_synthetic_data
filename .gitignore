@@ -162,3 +162,16 @@ cython_debug/
 data/*
 dataset/*
 real_data/*
+syn_bg/*
+syn_dog/*
+syn_turtle/*
+gan_dataset_40/*
+gan_dataset/*
+output_gan_40/*
+cut_output_bg/*
+cut_output_cat/*
+cut_output_backup/*
+cut_output_dog/*
+cut_output_no_aa/*
+cut_output_syn/*
+cut_output_turtle/*

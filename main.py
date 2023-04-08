@@ -185,6 +185,8 @@ def main():
     real_eval_class_size = config['real_eval_class_size']
 
     is_mixed_datasets = (suffix == "mixed")
+    is_real_only = (suffix == "real_only")
+    is_gan = (suffix == "gan")
 
     for c in config["model_configs"]:
 
@@ -220,6 +222,18 @@ def main():
                                 eval_class_size=eval_class_size,
                                 real_train_class_size=real_train_class_size,
                                 real_eval_class_size=real_eval_class_size)
+        elif is_real_only:
+            dataloaders = load_datasets.load_data_real_only("dataset", 
+                                num_classes=num_classes, 
+                                batch_size=batch_size,
+                                train_class_size=train_class_size
+                                )  
+        elif is_gan:
+            dataloaders = load_datasets.load_data("gan_dataset", 
+                                num_classes=num_classes, 
+                                batch_size=batch_size,
+                                train_class_size=train_class_size,
+                                eval_class_size=eval_class_size)
         else:
             dataloaders = load_datasets.load_data("dataset", 
                                 num_classes=num_classes, 
@@ -230,7 +244,9 @@ def main():
         writer = SummaryWriter(os.path.join(output_dir, 'output'))
 
         train(model, output_dir, dataloaders, writer, name, lr, num_epochs, device)
-        test(model, output_dir, dataloaders, writer, name, device)
+
+        if not is_real_only:
+            test(model, output_dir, dataloaders, writer, name, device)
 
         writer.close()
 
